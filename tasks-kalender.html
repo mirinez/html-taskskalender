@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aufgaben + Kalender (Single-File)</title>
+
+  <!--
+  ========================================================================
+  DEUTSCHE ERKLÄRUNG (HEAD)
+  ------------------------------------------------------------------------
+  Dieses Projekt ist eine "Single-File" Web-App: Alles (HTML, CSS, JS)
+  befindet sich in EINER Datei. Praktisch zum Lernen, Testen und Teilen.
+
+  Bausteine:
+  1) HTML: Struktur (Inputs, Buttons, Listen, Kalender-Grid)
+  2) CSS: Pastellgrünes Design + Layout (Grid/Flex)
+  3) JavaScript: Logik (Tasks hinzufügen, togglen, löschen, speichern,
+     Kalender berechnen, Tag-Auswahl, Tagesnotizen)
+  4) localStorage: Speichert Daten im Browser (bleibt nach Reload erhalten)
+
+  Hinweis:
+  - localStorage ist pro Browser/Device. Keine echte DB, aber super fürs Üben.
+  ========================================================================
+  -->
+
+  <style>
+    /*
+    ========================================================================
+    DEUTSCHE ERKLÄRUNG (CSS)
+    ------------------------------------------------------------------------
+    Wir nutzen CSS-Variablen (:root) für ein Pastellgrün-Farbschema.
+    Layout:
+    - .app nutzt CSS Grid: links Aufgaben, rechts Kalender/Tag-Panel
+    - .card: Kartenoptik mit Radius + Shadow für ruhige UI
+    ========================================================================
+    */
+
+    :root{
+      --bg: #f5fbf6;
+      --card: #ffffff;
+      --ink: #16301f;
+      --muted: #4a6b55;
+
+      /* Pastellgrün */
+      --accent: #7bcf9a;
+      --accent-2: #cfeedd;
+
+      --border: #d6eadc;
+      --shadow: 0 10px 30px rgba(10, 30, 15, .08);
+      --radius: 18px;
+      --gap: 16px;
+
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+
+    *{ box-sizing: border-box; }
+
+    body{
+      margin: 0;
+      font-family: var(--sans);
+      background: radial-gradient(1200px 600px at 20% 10%, var(--accent-2), transparent 60%),
+                  radial-gradient(900px 500px at 80% 30%, rgba(123, 207, 154, .25), transparent 60%),
+                  var(--bg);
+      color: var(--ink);
+    }
+
+    header{
+      padding: 28px 18px 10px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .title{
+      display:flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    h1{
+      margin:0;
+      font-size: 24px;
+      letter-spacing: .2px;
+    }
+
+    .badge{
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255,255,255,.7);
+    }
+
+    main{
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 12px 18px 40px;
+    }
+
+    .app{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: var(--gap);
+    }
+
+    @media (max-width: 920px){
+      .app{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .card h2{
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: var(--ink);
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .subtle{
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .row{
+      display:flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    input[type="text"], textarea{
+      width: 100%;
+      padding: 12px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      outline: none;
+      font-size: 14px;
+      background: #fbfffc;
+    }
+
+    textarea{ min-height: 90px; resize: vertical; }
+
+    input[type="text"]:focus, textarea:focus{
+      border-color: rgba(123, 207, 154, .9);
+      box-shadow: 0 0 0 4px rgba(123, 207, 154, .20);
+    }
+
+    .btn{
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--ink);
+      padding: 10px 12px;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: transform .05s ease, box-shadow .2s ease, border-color .2s ease;
+      box-shadow: 0 6px 16px rgba(10, 30, 15, .06);
+      font-size: 13px;
+    }
+    .btn:active{ transform: translateY(1px); }
+    .btn:hover{ border-color: rgba(123, 207, 154, .75); }
+
+    .btn.primary{
+      background: linear-gradient(180deg, rgba(123,207,154,.95), rgba(123,207,154,.78));
+      color: #0c2716;
+      border-color: rgba(80, 170, 120, .55);
+    }
+
+    .btn.danger{
+      background: #fff;
+      border-color: rgba(180, 80, 80, .35);
+      color: #5a1e1e;
+    }
+
+    .pillbar{
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .pill{
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.75);
+      padding: 7px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      user-select: none;
+    }
+    .pill.active{
+      border-color: rgba(123, 207, 154, .85);
+      background: rgba(123, 207, 154, .18);
+      color: var(--ink);
+    }
+
+    ul.tasks{
+      list-style: none;
+      padding: 0;
+      margin: 12px 0 0;
+      display:flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .task{
+      display:flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(245, 251, 246, .65);
+    }
+
+    .task .left{
+      display:flex;
+      gap: 10px;
+      align-items: flex-start;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .task input[type="checkbox"]{
+      width: 18px; height: 18px;
+      accent-color: var(--accent);
+      margin-top: 2px;
+    }
+
+    .task .text{
+      display:flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .task .titleText{
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .task.done .titleText{
+      text-decoration: line-through;
+      color: rgba(22, 48, 31, .55);
+    }
+
+    .task .meta{
+      font-family: var(--mono);
+      font-size: 11px;
+      color: rgba(74, 107, 85, .9);
+    }
+
+    /* Kalender */
+    .cal-header{
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .cal-header .month{
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+
+    .cal-grid{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      user-select: none;
+    }
+
+    .dow{
+      font-size: 12px;
+      color: var(--muted);
+      text-align:center;
+      padding: 6px 0;
+    }
+
+    .day{
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.8);
+      border-radius: 14px;
+      padding: 10px 0;
+      text-align:center;
+      cursor: pointer;
+      position: relative;
+      font-size: 13px;
+    }
+
+    .day.out{
+      opacity: .45;
+      background: rgba(255,255,255,.55);
+    }
+
+    .day.today{
+      border-color: rgba(123,207,154,.95);
+      box-shadow: 0 0 0 4px rgba(123,207,154,.18);
+    }
+
+    .day.selected{
+      background: rgba(123,207,154,.20);
+      border-color: rgba(123,207,154,.95);
+    }
+
+    .dot{
+      position:absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 6px;
+      width: 6px;
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(123,207,154,.9);
+    }
+
+    .split{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: var(--gap);
+    }
+
+    .kicker{
+      font-family: var(--mono);
+      font-size: 12px;
+      color: rgba(74, 107, 85, .95);
+    }
+
+    details{
+      margin-top: 12px;
+      border-top: 1px dashed var(--border);
+      padding-top: 10px;
+    }
+    summary{
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .help{
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .help code{
+      font-family: var(--mono);
+      font-size: 12px;
+      background: rgba(123,207,154,.14);
+      padding: 2px 6px;
+      border-radius: 8px;
+      border: 1px solid rgba(123,207,154,.25);
+      color: var(--ink);
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="title">
+      <h1>✅ Aufgaben + 📅 Kalender</h1>
+      <span class="badge">Single-File • localStorage • Pastellgrün</span>
+    </div>
+
+    <!-- Sichtbarer Erklärungstext (Deutsch) -->
+    <p class="subtle">
+      Eine kleine App zum Aufgaben notieren und abhaken – plus Monatskalender mit Notizen pro Tag.
+      Alles wird im Browser gespeichert (localStorage), also bleibt es nach dem Neuladen erhalten.
+    </p>
+  </header>
+
+  <main>
+    <div class="app">
+      <!-- ===================== AUFGABEN ===================== -->
+      <section class="card" aria-label="Aufgaben">
+        <h2>
+          <span>🧩 Aufgabenliste</span>
+          <span class="kicker" id="taskCount">0</span>
+        </h2>
+
+        <!--
+        ========================================================================
+        DEUTSCHE ERKLÄRUNG (AUFGABEN INPUT)
+        ------------------------------------------------------------------------
+        - #taskInput: Textfeld für neue Aufgabe
+        - #addTaskBtn: Button zum Hinzufügen
+        UX:
+        - Enter im Input fügt ebenfalls hinzu
+        ========================================================================
+        -->
+        <div class="row">
+          <input id="taskInput" type="text" placeholder="Neue Aufgabe… (Enter zum Hinzufügen)" aria-label="Neue Aufgabe" />
+          <button class="btn primary" id="addTaskBtn" aria-label="Aufgabe hinzufügen">Hinzufügen</button>
+        </div>
+
+        <div style="height:10px"></div>
+
+        <!-- Filter -->
+        <div class="pillbar" aria-label="Filter">
+          <span class="pill active" data-filter="all">Alle</span>
+          <span class="pill" data-filter="open">Offen</span>
+          <span class="pill" data-filter="done">Erledigt</span>
+        </div>
+
+        <ul class="tasks" id="taskList" aria-label="Aufgabenliste"></ul>
+
+        <details>
+          <summary>🇩🇪 Erklärung: Wie funktioniert die Aufgabenliste?</summary>
+          <div class="help">
+            <p>
+              Aufgaben werden als Array von Objekten gespeichert:
+              <code>{ id, title, done, createdAt }</code>.
+              Beim Hinzufügen erzeugen wir eine eindeutige <code>id</code>, setzen
+              <code>done=false</code> und speichern alles in <code>localStorage</code>.
+            </p>
+            <p>
+              Beim Rendern erzeugen wir die Listenelemente dynamisch. Ein Klick auf die Checkbox
+              toggelt <code>done</code>. Der Button <em>Löschen</em> entfernt das Objekt.
+              Filter (Alle/Offen/Erledigt) wirken, indem wir beim Rendern nur passende Einträge anzeigen.
+            </p>
+          </div>
+        </details>
+      </section>
+
+      <!-- ===================== KALENDER + TAGESNOTIZEN ===================== -->
+      <section class="split" aria-label="Kalender und Tagesnotizen">
+        <!-- Kalender -->
+        <section class="card" aria-label="Kalender">
+          <h2>
+            <span>📅 Kalender</span>
+            <span class="kicker" id="selectedLabel">—</span>
+          </h2>
+
+          <!--
+          ========================================================================
+          DEUTSCHE ERKLÄRUNG (KALENDER-LOGIK)
+          ------------------------------------------------------------------------
+          Ein Monatskalender braucht:
+          1) Wochentag des 1. Tages im Monat
+          2) Anzahl der Tage im Monat
+          3) Dann füllen wir ein 7-Spalten Grid (hier: 42 Zellen = 6 Wochen).
+          "out"-Tage (vor/nach dem Monat) halten das Layout stabil.
+          ========================================================================
+          -->
+
+          <div class="cal-header">
+            <button class="btn" id="prevMonthBtn" aria-label="Vorheriger Monat">←</button>
+            <div class="month" id="monthTitle">—</div>
+            <button class="btn" id="nextMonthBtn" aria-label="Nächster Monat">→</button>
+          </div>
+
+          <div class="cal-grid" id="dowRow" aria-hidden="true">
+            <div class="dow">Mo</div><div class="dow">Di</div><div class="dow">Mi</div>
+            <div class="dow">Do</div><div class="dow">Fr</div><div class="dow">Sa</div><div class="dow">So</div>
+          </div>
+
+          <div class="cal-grid" id="calGrid" aria-label="Tage des Monats"></div>
+
+          <details>
+            <summary>🇩🇪 Erklärung: Warum (jsDay + 6) % 7?</summary>
+            <div class="help">
+              <p>
+                JavaScript gibt Wochentage als <code>0=Sonntag</code> bis <code>6=Samstag</code>.
+                Wir wollen aber Montag als ersten Tag im Grid. Die Umrechnung
+                <code>(jsDay + 6) % 7</code> macht daraus:
+                Montag=0, …, Sonntag=6.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <!-- Tagesnotizen -->
+        <section class="card" aria-label="Tagesnotizen">
+          <h2>
+            <span>🗒️ Tagesnotizen</span>
+            <span class="kicker" id="dayKeyLabel">—</span>
+          </h2>
+
+          <!--
+          ========================================================================
+          DEUTSCHE ERKLÄRUNG (NOTIZEN PRO TAG)
+          ------------------------------------------------------------------------
+          Notizen werden pro Datum gespeichert. Schlüssel ist:
+          YYYY-MM-DD (z.B. 2026-02-10)
+          Datenstruktur:
+          notesByDay[dayKey] = "Text..."
+          ========================================================================
+          -->
+
+          <p class="subtle" id="dayHint">
+            Wähle einen Tag im Kalender aus, um Notizen für dieses Datum zu speichern.
+          </p>
+
+          <textarea id="dayNotes" placeholder="Schreibe hier deine Notizen für diesen Tag…"></textarea>
+
+          <div style="height:10px"></div>
+
+          <div class="row">
+            <button class="btn primary" id="saveNotesBtn">Notizen speichern</button>
+            <button class="btn danger" id="clearNotesBtn">Notizen löschen</button>
+          </div>
+
+          <details>
+            <summary>🇩🇪 Erklärung: localStorage</summary>
+            <div class="help">
+              <p>
+                <code>localStorage</code> speichert nur Strings. Deshalb benutzen wir:
+                <code>JSON.stringify()</code> beim Speichern und <code>JSON.parse()</code> beim Laden.
+              </p>
+              <p>
+                Vorteil: super einfach, offline, kein Server nötig. Nachteil: nicht für mehrere Geräte
+                oder echte Nutzerverwaltung gedacht.
+              </p>
+            </div>
+          </details>
+        </section>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    /*
+    ========================================================================
+    DEUTSCHE ERKLÄRUNG (JAVASCRIPT ÜBERSICHT)
+    ------------------------------------------------------------------------
+    State:
+    - tasks: Array von Task-Objekten
+    - filter: "all" | "open" | "done"
+    - viewYear/viewMonth: aktueller Kalendermonat
+    - selectedDate: ausgewähltes Datum
+    - notesByDay: Objekt dayKey -> Text
+
+    Funktionen:
+    - loadState(): Daten laden
+    - saveTasks()/saveNotes(): Daten speichern
+    - renderTasks(): Aufgabenliste zeichnen
+    - renderCalendar(): Kalender zeichnen
+    - updateDayPanel(): Notizenbereich aktualisieren
+    ========================================================================
+    */
+
+    // ---------- localStorage Keys ----------
+    const LS_TASKS_KEY = "miri_tasks_v1";
+    const LS_NOTES_KEY = "miri_notes_v1";
+
+    // ---------- State ----------
+    let tasks = [];
+    let filter = "all";
+
+    const now = new Date();
+    let viewYear = now.getFullYear();
+    let viewMonth = now.getMonth(); // 0-11
+    let selectedDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    let notesByDay = {}; // { "YYYY-MM-DD": "..." }
+
+    // ---------- DOM ----------
+    const taskInput = document.getElementById("taskInput");
+    const addTaskBtn = document.getElementById("addTaskBtn");
+    const taskList = document.getElementById("taskList");
+    const taskCount = document.getElementById("taskCount");
+
+    const pills = Array.from(document.querySelectorAll(".pill"));
+
+    const monthTitle = document.getElementById("monthTitle");
+    const calGrid = document.getElementById("calGrid");
+    const prevMonthBtn = document.getElementById("prevMonthBtn");
+    const nextMonthBtn = document.getElementById("nextMonthBtn");
+    const selectedLabel = document.getElementById("selectedLabel");
+
+    const dayKeyLabel = document.getElementById("dayKeyLabel");
+    const dayNotes = document.getElementById("dayNotes");
+    const saveNotesBtn = document.getElementById("saveNotesBtn");
+    const clearNotesBtn = document.getElementById("clearNotesBtn");
+    const dayHint = document.getElementById("dayHint");
+
+    // ---------- Helpers ----------
+    function pad2(n){ return String(n).padStart(2, "0"); }
+
+    function toDayKey(date){
+      const y = date.getFullYear();
+      const m = pad2(date.getMonth() + 1);
+      const d = pad2(date.getDate());
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatHuman(date){
+      return date.toLocaleDateString("de-DE", { weekday:"short", year:"numeric", month:"long", day:"numeric" });
+    }
+
+    function makeId(){
+      // Timestamp + Zufall -> praktisch eindeutig für diese App
+      return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+
+    // ---------- Persistence ----------
+    function loadState(){
+      try{
+        const rawTasks = localStorage.getItem(LS_TASKS_KEY);
+        tasks = rawTasks ? JSON.parse(rawTasks) : [];
+      }catch(e){
+        tasks = [];
+      }
+
+      try{
+        const rawNotes = localStorage.getItem(LS_NOTES_KEY);
+        notesByDay = rawNotes ? JSON.parse(rawNotes) : {};
+      }catch(e){
+        notesByDay = {};
+      }
+    }
+
+    function saveTasks(){
+      localStorage.setItem(LS_TASKS_KEY, JSON.stringify(tasks));
+    }
+
+    function saveNotes(){
+      localStorage.setItem(LS_NOTES_KEY, JSON.stringify(notesByDay));
+    }
+
+    // ---------- Aufgaben-Logik ----------
+    function addTask(title){
+      const clean = title.trim();
+      if(!clean) return;
+
+      const task = {
+        id: makeId(),
+        title: clean,
+        done: false,
+        createdAt: new Date().toISOString()
+      };
+
+      tasks.unshift(task); // neue oben
+      saveTasks();
+      renderTasks();
+    }
+
+    function toggleTask(id){
+      const t = tasks.find(x => x.id === id);
+      if(!t) return;
+      t.done = !t.done;
+      saveTasks();
+      renderTasks();
+    }
+
+    function deleteTask(id){
+      tasks = tasks.filter(x => x.id !== id);
+      saveTasks();
+      renderTasks();
+    }
+
+    function filteredTasks(){
+      if(filter === "open") return tasks.filter(t => !t.done);
+      if(filter === "done") return tasks.filter(t => t.done);
+      return tasks;
+    }
+
+    function renderTasks(){
+      const items = filteredTasks();
+      taskList.innerHTML = "";
+
+      const doneCount = tasks.filter(t => t.done).length;
+      taskCount.textContent = `${tasks.length} gesamt • ${doneCount} erledigt`;
+
+      for(const t of items){
+        const li = document.createElement("li");
+        li.className = "task" + (t.done ? " done" : "");
+
+        const left = document.createElement("div");
+        left.className = "left";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = t.done;
+        cb.addEventListener("change", () => toggleTask(t.id));
+
+        const text = document.createElement("div");
+        text.className = "text";
+
+        const title = document.createElement("div");
+        title.className = "titleText";
+        title.textContent = t.title;
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const dt = new Date(t.createdAt);
+        meta.textContent = `erstellt: ${dt.toLocaleString("de-DE", { dateStyle:"short", timeStyle:"short" })}`;
+
+        text.appendChild(title);
+        text.appendChild(meta);
+
+        left.appendChild(cb);
+        left.appendChild(text);
+
+        const actions = document.createElement("div");
+        actions.className = "row";
+        actions.style.gap = "8px";
+
+        const del = document.createElement("button");
+        del.className = "btn danger";
+        del.textContent = "Löschen";
+        del.addEventListener("click", () => deleteTask(t.id));
+
+        actions.appendChild(del);
+
+        li.appendChild(left);
+        li.appendChild(actions);
+
+        taskList.appendChild(li);
+      }
+    }
+
+    // ---------- Kalender-Logik ----------
+    function monthName(year, monthIndex){
+      const d = new Date(year, monthIndex, 1);
+      return d.toLocaleDateString("de-DE", { month:"long", year:"numeric" });
+    }
+
+    function daysInMonth(year, monthIndex){
+      // Trick: Tag 0 des nächsten Monats = letzter Tag des aktuellen Monats
+      return new Date(year, monthIndex + 1, 0).getDate();
+    }
+
+    function jsDayToMondayFirst(jsDay){
+      // JS: 0=Sonntag, 1=Montag ... 6=Samstag
+      // Wanted: 0=Montag ... 6=Sonntag
+      return (jsDay + 6) % 7;
+    }
+
+    function sameDay(a, b){
+      return a.getFullYear() === b.getFullYear()
+          && a.getMonth() === b.getMonth()
+          && a.getDate() === b.getDate();
+    }
+
+    function renderCalendar(){
+      monthTitle.textContent = monthName(viewYear, viewMonth);
+      calGrid.innerHTML = "";
+
+      const first = new Date(viewYear, viewMonth, 1);
+      const startOffset = jsDayToMondayFirst(first.getDay());
+      const dim = daysInMonth(viewYear, viewMonth);
+
+      // Vormonat
+      const prevMonth = new Date(viewYear, viewMonth, 0);
+      const prevDim = prevMonth.getDate();
+
+      // 42 Zellen (6 Wochen)
+      for(let cell=0; cell<42; cell++){
+        const dayBtn = document.createElement("div");
+        dayBtn.className = "day";
+
+        let cellDate;
+
+        if(cell < startOffset){
+          // Tage aus Vormonat
+          const dayNum = prevDim - (startOffset - 1 - cell);
+          cellDate = new Date(viewYear, viewMonth - 1, dayNum);
+          dayBtn.classList.add("out");
+          dayBtn.textContent = dayNum;
+        }else if(cell < startOffset + dim){
+          // aktueller Monat
+          const dayNum = (cell - startOffset) + 1;
+          cellDate = new Date(viewYear, viewMonth, dayNum);
+          dayBtn.textContent = dayNum;
+        }else{
+          // Tage aus Folgemonat
+          const dayNum = (cell - (startOffset + dim)) + 1;
+          cellDate = new Date(viewYear, viewMonth + 1, dayNum);
+          dayBtn.classList.add("out");
+          dayBtn.textContent = dayNum;
+        }
+
+        // Highlights
+        if(sameDay(cellDate, new Date())) dayBtn.classList.add("today");
+        if(sameDay(cellDate, selectedDate)) dayBtn.classList.add("selected");
+
+        // Punkt, wenn Notiz existiert
+        const k = toDayKey(cellDate);
+        if(notesByDay[k] && notesByDay[k].trim().length > 0){
+          const dot = document.createElement("div");
+          dot.className = "dot";
+          dayBtn.appendChild(dot);
+        }
+
+        dayBtn.addEventListener("click", () => {
+          selectedDate = cellDate;
+
+          // Klick auf "out"-Tage: in den passenden Monat springen
+          viewYear = selectedDate.getFullYear();
+          viewMonth = selectedDate.getMonth();
+
+          renderCalendar();
+          updateDayPanel();
+        });
+
+        calGrid.appendChild(dayBtn);
+      }
+
+      selectedLabel.textContent = formatHuman(selectedDate);
+    }
+
+    // ---------- Tagesnotizen ----------
+    function updateDayPanel(){
+      const k = toDayKey(selectedDate);
+      dayKeyLabel.textContent = k;
+      dayNotes.value = notesByDay[k] ?? "";
+      dayHint.textContent = `Notizen für: ${formatHuman(selectedDate)}`;
+    }
+
+    function setNotesForSelectedDay(text){
+      const k = toDayKey(selectedDate);
+      const clean = (text ?? "").trimEnd();
+
+      if(clean.trim().length === 0){
+        delete notesByDay[k];
+      }else{
+        notesByDay[k] = clean;
+      }
+
+      saveNotes();
+      renderCalendar();  // Punkte aktualisieren
+      updateDayPanel();
+    }
+
+    // ---------- UI Wiring ----------
+    addTaskBtn.addEventListener("click", () => addTask(taskInput.value));
+
+    taskInput.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){
+        addTask(taskInput.value);
+        taskInput.value = "";
+      }
+    });
+
+    addTaskBtn.addEventListener("click", () => {
+      taskInput.value = "";
+      taskInput.focus();
+    });
+
+    pills.forEach(p => {
+      p.addEventListener("click", () => {
+        pills.forEach(x => x.classList.remove("active"));
+        p.classList.add("active");
+        filter = p.dataset.filter;
+        renderTasks();
+      });
+    });
+
+    prevMonthBtn.addEventListener("click", () => {
+      const d = new Date(viewYear, viewMonth - 1, 1);
+      viewYear = d.getFullYear();
+      viewMonth = d.getMonth();
+      renderCalendar();
+    });
+
+    nextMonthBtn.addEventListener("click", () => {
+      const d = new Date(viewYear, viewMonth + 1, 1);
+      viewYear = d.getFullYear();
+      viewMonth = d.getMonth();
+      renderCalendar();
+    });
+
+    saveNotesBtn.addEventListener("click", () => {
+      setNotesForSelectedDay(dayNotes.value);
+    });
+
+    clearNotesBtn.addEventListener("click", () => {
+      setNotesForSelectedDay("");
+    });
+
+    // ---------- Init ----------
+    loadState();
+    renderTasks();
+    renderCalendar();
+    updateDayPanel();
+
+    /*
+    ========================================================================
+    IDEEN FÜR ERWEITERUNGEN
+    ------------------------------------------------------------------------
+    - Aufgaben pro Tag: task.dayKey = "YYYY-MM-DD" und dann Punkte im Kalender
+    - Prioritäten (low/med/high)
+    - Drag&Drop Sortierung
+    - Export/Import als JSON
+    - PWA Offline (Service Worker)
+    ========================================================================
+    */
+  </script>
+</body>
+</html>
